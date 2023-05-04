@@ -1,12 +1,16 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from pmdarima import auto_arima
 from sklearn.metrics import mean_squared_error
 from math import sqrt
 import warnings
-warnings.filterwarnings("ignore")
+from sklearn.metrics import r2_score
+
+#warnings.filterwarnings("ignore")
 
 df_train = pd.read_csv("sales_train.csv")
 df_shops = pd.read_csv("shops-translated.csv")
@@ -22,44 +26,56 @@ df_final = pd.merge(df_nuevo, df_items, on="item_id", how="left")
 
 
 df_bo2 = df_final[df_final['item_id']== 2308]
+#df_bo2 = df_bo2[ df_final['City'] == "Moscow"]
 
 df_bo2_transformado = df_bo2[['date', 'item_cnt_day']]
 df_bo2_transformado['date'] = pd.to_datetime(df_bo2_transformado['date'])
 weeks=df_bo2_transformado.groupby([pd.Grouper(key='date', freq='W')])['item_cnt_day'].sum()
-df_weeks = pd.DataFrame(weeks)
-#agregar = {'date':'first','item_cnt_day':'sum'}
-#df_bo2_agregado = df_bo2_transformado.groupby('date').item_cnt_day.agg(['sum'])
-#df_bo2_agregado['date'] = df_bo2_agregado.index
-
-dftest = adfuller(df_weeks, autolag='AIC')
-
-hola = auto_arima(df_weeks['item_cnt_day'], trace=True, suppress_warnings=True)
+df_weeks_bo2 = pd.DataFrame(weeks)
+df_weeks_bo2.plot()
+df_bo2_train = df_weeks_bo2.iloc[0:104]
+df_bo2_test = df_weeks_bo2.iloc[104:148]
+df_bo2_train.plot()
+df_bo2_test.plot()
+log_bo2 = np.log(df_bo2_train)#.plot()
+#Con el log comprobamos si es estable en varianza, no nos sirve
+estacionaria_bo2 = df_bo2_train.diff()
+estacionaria_bo2_test = df_bo2_test.diff()
+estacionaria_bo2.plot(color="red")
+estacionaria_bo2_test.plot(color ="blue")
+#Tiene una tenedencia repetida anualmente
+#acf = plot_acf(df_bo2_train)
+#pacf = plot_pacf(df_bo2_train)
+dftest = adfuller(df_bo2_train, autolag='AIC')
+## Es estacionaria porque el p-valor < 0.05, es 2.88 x 10^-6
+hola = auto_arima(df_bo2_train, trace=True, suppress_warnings=True)
 hola.summary()
 
-df_weeks['item_cnt_day'].plot(legend=True)
-df_weeks['ln'] = np.log(df_weeks['item_cnt_day'])
-df_weeks['estacionaria'] = df_weeks['item_cnt_day'].diff()
-df_weeks['ln'].plot(legend=True)
-df_weeks['estacionaria'].plot(legend=True)
-# Cambia, no es muy estable en varianza
-df_bo2_train = df_weeks.iloc[0:130]
-df_bo2_test = df_weeks.iloc[130:143]
-
-model = ARIMA(df_bo2_train['item_cnt_day'], order=(1,1,0))
-model = model.fit()
-model.summary()
-
-inicio= len(df_bo2_train)-1
-fin = len(df_bo2_train) + len(df_bo2_test)-2
-prediccion = model.predict(start=inicio, end=fin, typ='levels')
-prediccion.index = df_weeks.index[inicio:fin+1]
-
-prediccion.plot(legend=True)
-df_bo2_test['item_cnt_day'].plot(legend=True)
-
-df_bo2_test['item_cnt_day'].mean()
-rmse = sqrt(mean_squared_error(prediccion, df_bo2_test['sum']))
-
-
-
-
+def checkings(df,df2,p,d,q,p2,d2,q2):
+    fit_arima = ARIMA(df, order=(p,d,q),seasonal_order=(p2, d2, q2, 52))
+    fit_arima2 = fit_arima.fit()
+    fit_arima2.summary()
+    predict = fit_arima2.predict(start=105,end=147).to_frame()
+    comparacion = predict.join(df2)
+    plt.plot(comparacion)
+    plt.show()
+    mse = mean_squared_error(comparacion['item_cnt_day'], comparacion['predicted_mean'])
+    r_2 = r2_score(comparacion['item_cnt_day'], comparacion['predicted_mean'])
+    print(fit_arima2.summary())
+    print("MSE="+str(mse))
+    print("r^2="+str(r_2))
+    
+checkings(df_bo2_train,df_bo2_test,1,0,0,1,0,0)
+checkings(df_bo2_train,df_bo2_test,1,0,0,1,1,0)
+checkings(df_bo2_train,df_bo2_test,1,0,0,1,0,1)
+checkings(df_bo2_train,df_bo2_test,1,0,0,1,1,1)
+checkings(df_bo2_train,df_bo2_test,1,0,0,0,1,0)
+checkings(df_bo2_train,df_bo2_test,1,0,0,2,0,0)
+checkings(df_bo2_train,df_bo2_test,1,1,0,1,0,0)
+checkings(df_bo2_train,df_bo2_test,1,0,1,1,0,0)
+checkings(df_bo2_train,df_bo2_test,1,0,1,1,1,0)
+checkings(df_bo2_train,df_bo2_test,1,0,1,1,1,1)
+checkings(df_bo2_train,df_bo2_test,2,1,0,1,0,0)
+checkings(df_bo2_train,df_bo2_test,2,1,1,1,0,0)
+checkings(estacionaria_bo2,estacionaria_bo2_test,1,1,0,1,0,0)
+checkings(df_bo2_train,df_bo2_test,0,2,2,1,0,0)
