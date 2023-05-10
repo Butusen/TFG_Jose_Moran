@@ -44,7 +44,7 @@ estacionaria_bo2_test = df_bo2_test.diff()
 estacionaria_bo2.plot(color="red")
 estacionaria_bo2_test.plot(color ="blue")
 #Tiene una tenedencia repetida anualmente
-#acf = plot_acf(df_bo2_train)
+acf = plot_acf(df_bo2_train)
 #pacf = plot_pacf(df_bo2_train)
 dftest = adfuller(df_bo2_train, autolag='AIC')
 ## Es estacionaria porque el p-valor < 0.05, es 2.88 x 10^-6
@@ -79,3 +79,21 @@ checkings(df_bo2_train,df_bo2_test,2,1,0,1,0,0)
 checkings(df_bo2_train,df_bo2_test,2,1,1,1,0,0)
 checkings(estacionaria_bo2,estacionaria_bo2_test,1,1,0,1,0,0)
 checkings(df_bo2_train,df_bo2_test,0,2,2,1,0,0)
+
+#Ahora probamos con todos los datos
+prueba_total = auto_arima(df_weeks_bo2, trace=True, suppress_warnings=True)
+prueba_total.summary()
+
+weekly_dates = pd.date_range(start="2015-11-08", end="2016-12-31", freq='W')
+weekly_df = pd.DataFrame(index=weekly_dates)
+df_cuatro_años= pd.concat([df_weeks_bo2,weekly_df])
+
+fit_arima_real = ARIMA(df_weeks_bo2, order=(1,1,0),seasonal_order=(1, 0, 0, 52))
+fit_arima2_real = fit_arima_real.fit()
+fit_arima2_real.summary()
+predict = fit_arima2_real.predict(start=147,end=207).to_frame()
+plt.plot(df_weeks_bo2)
+plt.plot(predict)
+plt.xticks(rotation='vertical')
+plt.show()
+
